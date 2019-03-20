@@ -85,7 +85,6 @@ void init_particles( int n, particle_t *p )
 //
 //  interact two particles
 //
-#pragma acc routine
 void apply_force( particle_t &particle, particle_t &neighbor , double *dmin, double *davg, int *navg)
 {
 

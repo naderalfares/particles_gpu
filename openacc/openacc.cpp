@@ -79,7 +79,6 @@ int main( int argc, char **argv )
         //
         //  compute all forces
         //
-            #pragma acc parallel loop
             for(i = 0; i < numCells; i++){
                 for(j = 0; j < numCells; j++){
 		            initCellParticles(cells[i][j]); // initialize particles in current cell
