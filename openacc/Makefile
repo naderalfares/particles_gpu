@@ -17,7 +17,7 @@ TARGETS = openacc
 all:	$(TARGETS)
 
 openacc: openacc.o common.o
-	$(PGCPP) -o -acc $@ $(LIBS) openacc.o common.o
+	$(PGCPP) -acc -o $@ $(LIBS) openacc.o common.o
 
 openacc.o: openacc.cpp common.h
 	$(PGCPP) -c -acc  openacc.cpp
