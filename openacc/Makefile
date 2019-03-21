@@ -20,7 +20,7 @@ openacc: openacc.o common.o
 	$(PGCPP) -acc -o $@ $(LIBS) openacc.o common.o
 
 openacc.o: openacc.cpp common.h
-	$(PGCPP) -c -acc  openacc.cpp
+	$(PGCPP) -c -acc -Minfo=accel  openacc.cpp
 
 common.o: common.cpp common.h
 	$(PGCPP) -c -acc common.cpp
