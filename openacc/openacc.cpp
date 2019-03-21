@@ -64,11 +64,6 @@ int main( int argc, char **argv )
     //  simulate a number of time steps
     //
     double simulation_time = read_timer( );
-    for(int i = 0; i < n; i++){
-       int cell_i = floor(particles[i].x / CELL_SIZE);
-       int cell_j = floor(particles[i].y / CELL_SIZE);
-       cells[cell_i][cell_j].push_back(&particles[i]); 
-    } //end for-loop for constructing bin
     int i,j;
 
     for( int step = 0; step < 1000; step++ )
@@ -76,6 +71,16 @@ int main( int argc, char **argv )
         navg = 0;
         davg = 0.0;
 	    dmin = 1.0;
+        
+
+        for(i = 0; i < n; i++){
+            int cell_i = floor(particles[i].x / CELL_SIZE);
+            int cell_j = floor(particles[i].y / CELL_SIZE);
+            cells[cell_i][cell_j].push_back(&particles[i]); 
+        } //end for-loop for constructing bin
+        
+
+
         //
         //  compute all forces
         //
@@ -151,15 +156,9 @@ int main( int argc, char **argv )
        
         for(i = 0; i < numCells; i++)
             for( j = 0; j < numCells; j++)
-                std::vector<particle_t*> temp;
-                for(int p_index = 0; p_index < cells[i][j].size(); p_index++){
-      		        int cell_i = floor(cells[i][j][p_index]->x / CELL_SIZE);
-                    int cell_j = floor(cells[i][j][p_index]->y / CELL_SIZE);
-                    if( cell_i != i && cell_j != j ) {
-                        cells[cell_i][cell_j].push_back(cells[i][j][p_index]);
-                        cells[i][j].erase(cells[i][j].begin() + p_index);
-                    }
-                }
+                cells[i][j].clear();
+
+
 
           // using omp_set_lock and omp_unset_lock
         if( find_option( argc, argv, "-no" ) == -1 ) 
