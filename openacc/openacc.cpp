@@ -17,7 +17,6 @@ void apply_forces_to_cell(std::vector<particle_t*> &src, std::vector<particle_t*
 		    apply_force(*(src[i]), *(cell[j]),dmin,davg,navg);
     }
 }
-
 void initCellParticles(std::vector<particle_t*> &src) {
     for(int i = 0; i < src.size(); i++) 
         src[i]->ax = src[i]->ay = 0;
@@ -64,6 +63,11 @@ int main( int argc, char **argv )
     //  simulate a number of time steps
     //
     double simulation_time = read_timer( );
+    for(int i = 0; i < n; i++){
+       int cell_i = floor(particles[i].x / CELL_SIZE);
+       int cell_j = floor(particles[i].y / CELL_SIZE);
+       cells[cell_i][cell_j].push_back(&particles[i]); 
+    } //end for-loop for constructing bin
     int i,j;
 
     for( int step = 0; step < 1000; step++ )
@@ -72,81 +76,71 @@ int main( int argc, char **argv )
         davg = 0.0;
 	    dmin = 1.0;
         
-
-        for(i = 0; i < n; i++){
-            int cell_i = floor(particles[i].x / CELL_SIZE);
-            int cell_j = floor(particles[i].y / CELL_SIZE);
-            cells[cell_i][cell_j].push_back(&particles[i]); 
-        } //end for-loop for constructing bin
-        
-
-
         //
         //  compute all forces
         //
-            for(i = 0; i < numCells; i++){
-                for(j = 0; j < numCells; j++){
-		            initCellParticles(cells[i][j]); // initialize particles in current cell
-                    apply_forces_to_cell(cells[i][j],cells[i][j], &navg, &dmin, &davg); 
-                    if(i==0 && j==0){
-                          apply_forces_to_cell(cells[i][j],cells[1][0], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[0][1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[1][1], &navg, &dmin, &davg);
-                    } else if(i == numCells -1 && j == numCells - 1){
-                          apply_forces_to_cell(cells[i][j],cells[i-1][j-1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i-1][j], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i][j-1], &navg, &dmin, &davg);
-                    
-                    } else if(i == numCells - 1 && j == 0){
-                          apply_forces_to_cell(cells[i][j],cells[i][j+1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i-1][j], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i-1][j+1], &navg, &dmin, &davg);
+                for(i = 0; i < numCells; i++){
+                    for(j = 0; j < numCells; j++){
+		                initCellParticles(cells[i][j]); // initialize particles in current cell
+                        apply_forces_to_cell(cells[i][j],cells[i][j], &navg, &dmin, &davg); 
+                        if(i==0 && j==0){
+                              apply_forces_to_cell(cells[i][j],cells[1][0], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[0][1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[1][1], &navg, &dmin, &davg);
+                        } else if(i == numCells -1 && j == numCells - 1){
+                              apply_forces_to_cell(cells[i][j],cells[i-1][j-1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i-1][j], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i][j-1], &navg, &dmin, &davg);
+                        
+                        } else if(i == numCells - 1 && j == 0){
+                              apply_forces_to_cell(cells[i][j],cells[i][j+1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i-1][j], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i-1][j+1], &navg, &dmin, &davg);
 
-                    } else if(i == 0 && j == numCells -1){
-                          apply_forces_to_cell(cells[i][j],cells[i][j-1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i+1][j-1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i+1][j], &navg, &dmin, &davg);
-                    }else if(i == numCells -1){
-                          apply_forces_to_cell(cells[i][j],cells[i][j+1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i][j-1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i-1][j+1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i-1][j-1], &navg, &dmin, &davg);
-                          apply_forces_to_cell(cells[i][j],cells[i-1][j], &navg, &dmin, &davg); 
-                          
-                    }else if(j == numCells -1){
-                          apply_forces_to_cell(cells[i][j],cells[i+1][j], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i+1][j-1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i-1][j], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i-1][j-1], &navg, &dmin, &davg);
-                          apply_forces_to_cell(cells[i][j],cells[i][j-1], &navg, &dmin, &davg); 
-                    
-                    }else if(i == 0){
-                          apply_forces_to_cell(cells[i][j],cells[i][j-1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i][j+1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i+1][j], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i+1][j-1], &navg, &dmin, &davg);
-                          apply_forces_to_cell(cells[i][j],cells[i+1][j+1], &navg, &dmin, &davg); 
-                          
-                    }else if(j == 0){
-                          apply_forces_to_cell(cells[i][j],cells[i-1][j], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i+1][j], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i-1][j+1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i][j+1], &navg, &dmin, &davg);
-                          apply_forces_to_cell(cells[i][j],cells[i+1][j+1], &navg, &dmin, &davg); 
-                    }else{
-                          apply_forces_to_cell(cells[i][j],cells[i][j+1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i][j-1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i-1][j+1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i-1][j], &navg, &dmin, &davg);
-                          apply_forces_to_cell(cells[i][j],cells[i-1][j-1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i+1][j+1], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i+1][j], &navg, &dmin, &davg); 
-                          apply_forces_to_cell(cells[i][j],cells[i+1][j-1], &navg, &dmin, &davg); 
-                    }
+                        } else if(i == 0 && j == numCells -1){
+                              apply_forces_to_cell(cells[i][j],cells[i][j-1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i+1][j-1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i+1][j], &navg, &dmin, &davg);
+                        }else if(i == numCells -1){
+                              apply_forces_to_cell(cells[i][j],cells[i][j+1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i][j-1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i-1][j+1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i-1][j-1], &navg, &dmin, &davg);
+                              apply_forces_to_cell(cells[i][j],cells[i-1][j], &navg, &dmin, &davg); 
+                              
+                        }else if(j == numCells -1){
+                              apply_forces_to_cell(cells[i][j],cells[i+1][j], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i+1][j-1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i-1][j], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i-1][j-1], &navg, &dmin, &davg);
+                              apply_forces_to_cell(cells[i][j],cells[i][j-1], &navg, &dmin, &davg); 
+                        
+                        }else if(i == 0){
+                              apply_forces_to_cell(cells[i][j],cells[i][j-1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i][j+1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i+1][j], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i+1][j-1], &navg, &dmin, &davg);
+                              apply_forces_to_cell(cells[i][j],cells[i+1][j+1], &navg, &dmin, &davg); 
+                              
+                        }else if(j == 0){
+                              apply_forces_to_cell(cells[i][j],cells[i-1][j], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i+1][j], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i-1][j+1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i][j+1], &navg, &dmin, &davg);
+                              apply_forces_to_cell(cells[i][j],cells[i+1][j+1], &navg, &dmin, &davg); 
+                        }else{
+                              apply_forces_to_cell(cells[i][j],cells[i][j+1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i][j-1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i-1][j+1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i-1][j], &navg, &dmin, &davg);
+                              apply_forces_to_cell(cells[i][j],cells[i-1][j-1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i+1][j+1], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i+1][j], &navg, &dmin, &davg); 
+                              apply_forces_to_cell(cells[i][j],cells[i+1][j-1], &navg, &dmin, &davg); 
+                        }
 
                 } // end of j loop
             } // end of i loop
-        
 		
         //
         //  move particles
@@ -154,12 +148,19 @@ int main( int argc, char **argv )
         for(i = 0; i < n; i++ ) 
             move( particles[i] );
        
-        for(i = 0; i < numCells; i++)
-            for( j = 0; j < numCells; j++)
-                cells[i][j].clear();
-
-
-
+        for(i = 0; i < numCells; i++){
+            for( j = 0; j < numCells; j++){
+                std::vector<particle_t*> temp;
+                for(int p_index = 0; p_index < cells[i][j].size(); p_index++){
+      		        int cell_i = floor(cells[i][j][p_index]->x / CELL_SIZE);
+                    int cell_j = floor(cells[i][j][p_index]->y / CELL_SIZE);
+                    if( !(cell_i == i && cell_j == j) ) {
+                        cells[cell_i][cell_j].push_back(cells[i][j][p_index]);
+                        cells[i][j].erase(cells[i][j].begin() + p_index);
+                    }
+                }
+            }
+        }
           // using omp_set_lock and omp_unset_lock
         if( find_option( argc, argv, "-no" ) == -1 ) 
         {
