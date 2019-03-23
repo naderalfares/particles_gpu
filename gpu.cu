@@ -4,8 +4,12 @@
 #include <math.h>
 #include <cuda.h>
 #include "common.h"
+#include<iostream>
+
 
 #define NUM_THREADS 256
+
+
 
 extern double size;
 //
@@ -32,6 +36,9 @@ __device__ void apply_force_gpu(particle_t &particle, particle_t &neighbor)
 
 }
 
+
+//original code
+/* 
 __global__ void compute_forces_gpu(particle_t * particles, int n)
 {
   // Get thread (particle) ID
@@ -43,6 +50,26 @@ __global__ void compute_forces_gpu(particle_t * particles, int n)
     apply_force_gpu(particles[tid], particles[j]);
 
 }
+*/
+
+
+
+__global__ void compute_forces_gpu(particle_t * particles, int n)
+{
+  // Get thread (particle) ID
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  if(tid >= n) return;
+
+  particles[tid].ax = particles[tid].ay = 0;
+  for(int j = 0 ; j < n ; j++)
+    apply_force_gpu(particles[tid], particles[j]);
+
+}
+
+
+
+
+
 
 __global__ void move_gpu (particle_t * particles, int n, double size)
 {
@@ -107,6 +134,20 @@ int main( int argc, char **argv )
     set_size( n );
 
     init_particles( n, particles );
+
+
+    //std::cout << "size: " << size << std::endl;
+    double world_dim = size;
+    int grid_dim = int(ceil(sqrt(n)));
+    double cell_size = world_dim/grid_dim;
+    //ensure to not violate cutoff constraint
+    std::cout<< "cutoff: " << cutoff << std::endl; 
+    if(cell_size < cutoff){
+        grid_dim = int(world_dim / cutoff);
+        cell_size= world_dim / grid_dim; 
+    }
+
+
 
     cudaThreadSynchronize();
     double copy_time = read_timer( );
