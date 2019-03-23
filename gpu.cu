@@ -113,6 +113,56 @@ __global__ void move_gpu (particle_t * particles, int n, double size)
 }
 
 
+//method called by host to send the grid to gpu
+__host__ Bin* send_grid_to_gpu(Bin* grid, int dim){
+    Bin* d_grid;
+    cudaMalloc((void **) &d_grid, dim * dim * sizeof(Bin));
+    cudaMemcpy(d_grid, grid, dim * dim * sizeof(Bin), cudaMemcpyHostToDevice);
+    return d_grid;
+}
+
+
+__device__ void apply_forces_to_cell(Bin &src, Bin &neighbor){
+    int num_particles_src = src.number_of_particles;
+    int num_particles_neighbor = neighbor.number_of_particles;
+
+    for(int i = 0; i < num_particles_src; i++){
+        for(int j = 0; j < num_particles_neighbor; j++){
+            apply_force_gpu(*(src.particles[i]), *(neighbor.particles[j]));
+        }
+    }
+
+}
+
+//method to apply the forces on the bins
+__device__ void apply_forces_on_grid(Bin* grid, const int dim, int tid){
+
+    // assume that # of threads are <dim>
+    int bin_i = tid/dim;
+    int bin_j = tid%dim;
+    int index = bin_i * dim + bin_j;
+    int number_of_particles = grid[index].number_of_particles;
+    
+    // initilize acceleration
+    for(int i = 0; i < number_of_particles; i++){
+        grid[index].particles[i]->ax = 0;
+        grid[index].particles[i]->ay = 0;        
+    }
+    
+    for(int i = -1; i < 2; i++){
+        int delta_i = bin_i + i;
+        for(int j = -1; j < 2; j++){
+            int delta_j = bin_j + j;
+            if(delta_i >= 0 && delta_j >= 0 && delta_i < dim && delta_j < dim){
+                int index2 = delta_i * dim + delta_j;
+                apply_forces_to_cell(grid[index], grid[index2]);
+            }
+        }
+    }
+   
+} 
+
+
 
 int main( int argc, char **argv )
 {    
@@ -149,6 +199,7 @@ int main( int argc, char **argv )
     int grid_dim = int(ceil(sqrt(n)));
     double cell_size = world_dim/grid_dim;
     //ensure to not violate cutoff constraint
+    // if violated, set cell_size to be the cutoff
     std::cout<< "cutoff: " << cutoff << std::endl; 
     if(cell_size < cutoff){
         grid_dim = int(world_dim / cutoff);
