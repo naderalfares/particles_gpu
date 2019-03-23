@@ -90,8 +90,6 @@ int main( int argc, char **argv )
                 for(i = 0; i < numCells; i++){
                     #pragma acc loop independent
                     for(j = 0; j < numCells; j++){
-		                //initCellParticles(cells[i][j]); // initialize particles in current cell
-		                initCellParticles(cells[i][j]); // initialize particles in current cell
                         apply_forces_to_cell(cells[i][j],cells[i][j], &navg, &dmin, &davg); 
                         if(i==0 && j==0){
                               apply_forces_to_cell(cells[i][j],cells[1][0], &navg, &dmin, &davg); 
