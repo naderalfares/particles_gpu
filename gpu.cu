@@ -5,9 +5,17 @@
 #include <cuda.h>
 #include "common.h"
 #include<iostream>
-
+#include<vector>
 
 #define NUM_THREADS 256
+
+
+
+struct Bin{
+    particle_t** particles;
+    int number_of_particles;
+};
+
 
 
 
@@ -136,7 +144,7 @@ int main( int argc, char **argv )
     init_particles( n, particles );
 
 
-    //std::cout << "size: " << size << std::endl;
+    std::cout << "size: " << size << std::endl;
     double world_dim = size;
     int grid_dim = int(ceil(sqrt(n)));
     double cell_size = world_dim/grid_dim;
@@ -147,7 +155,31 @@ int main( int argc, char **argv )
         cell_size= world_dim / grid_dim; 
     }
 
+    //init grid
+    Bin* grid = (Bin*) malloc(grid_dim*grid_dim*sizeof(Bin));
+    for(int i = 0; i < grid_dim*grid_dim; i++)
+        grid[i] = Bin(); 
 
+    //used vector in host temporarily to bin particles in host
+    // then papck the particles in the grid array to be used in gpu
+    std::vector<particle_t*> temp[grid_dim][grid_dim];
+    for(int i = 0; i < n; i++){
+        int index_i = floor(particles[i].y/cell_size);
+        int index_j = floor(particles[i].x/cell_size);
+        temp[index_i][index_j].push_back(&particles[i]);
+    }
+    //naive way,, improve later
+    for(int i = 0; i < grid_dim; i++){
+        for(int j = 0; j < grid_dim; j++){
+            int number_of_particles = temp[i][j].size();
+            grid[i*grid_dim + j].number_of_particles = number_of_particles;
+            grid[i*grid_dim + j].particles = (particle_t**) malloc(number_of_particles * sizeof(particle_t*));
+            for(int k = 0; k < number_of_particles; k++){
+                grid[i*grid_dim + j].particles[k] = temp[i][j][k];
+            }
+            temp[i][j].clear();     
+        }
+    }
 
     cudaThreadSynchronize();
     double copy_time = read_timer( );
