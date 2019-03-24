@@ -296,6 +296,7 @@ int main( int argc, char **argv )
         //  compute forces
         //
 	    //compute_forces_gpu <<< blks, NUM_THREADS >>> (d_particles, n);
+	blks = (grid_dim * grid_dim + NUM_THREADS - 1) / NUM_THREADS;
             
         compute_forces_gpu <<< blks, NUM_THREADS >>> (d_bins, grid_dim);
 
@@ -304,6 +305,7 @@ int main( int argc, char **argv )
         //
         //  move particles
         //
+	    blks = (n + NUM_THREADS - 1) / NUM_THREADS;
 	    move_gpu <<< blks, NUM_THREADS >>> (d_particles, n, size);
         
         //
