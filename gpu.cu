@@ -282,8 +282,6 @@ int main( int argc, char **argv )
     //allocate memory for bin in gpu
     cudaMalloc((void **) &d_bins, grid_dim * grid_dim * sizeof(Bin));
 
-   printf("HELLO/n");
-
 
     // Copy the particles to the GPU
     cudaMemcpy(d_particles, particles, n * sizeof(particle_t), cudaMemcpyHostToDevice);
