@@ -245,7 +245,7 @@ int main( int argc, char **argv )
     // if violated, set cell_size to be the cutoff
     std::cout<< "cutoff: " << cutoff << std::endl; 
     if(cell_size < cutoff){
-        grid_dim = int(world_dim / cutoff);
+        grid_dim = floor(world_dim / (2*cutoff));
         cell_size= world_dim / grid_dim; 
     }
 
@@ -257,7 +257,7 @@ int main( int argc, char **argv )
     // Varibale for bin in gpu
     Bin *d_bins;
     // assuming the particles per bin doesn't exceed twice the proportionaly size
-    int particles_per_bin = floor(n / grid_dim * grid_dim) * 2;
+    int particles_per_bin = floor(n / (grid_dim * grid_dim)) * 2;
 
     //allocate memory for bin in gpu
     cudaMalloc((void **) &d_bins, grid_dim * grid_dim * sizeof(Bin));
