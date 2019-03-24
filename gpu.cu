@@ -181,8 +181,8 @@ __global__ void initial_binning(Bin *grid, particle_t * particles, const int n, 
         int bin_id_j = tid % dim;
 
 	// Each particle if belongs to bin puts it in the particles array of bin
-	// assumes memory allocated for particles
 	grid[tid].number_of_particles = 0;
+	grid[tid].particles = new particle_t* [particles_per_bin];
 	for(int p = 0; p < n; p++) 
 	{
 		int particle_idx_i = floor((double)(particles[p].y / cell_size));
@@ -261,10 +261,8 @@ int main( int argc, char **argv )
 
     //allocate memory for bin in gpu
     cudaMalloc((void **) &d_bins, grid_dim * grid_dim * sizeof(Bin));
-    for(int i = 0; i < grid_dim * grid_dim; i++)
-    {
-	cudaMalloc((void **) &(d_bins[i].particles), particles_per_bin * sizeof(particle_t*));
-    }
+
+   printf("HELLO/n");
 
 
     // Copy the particles to the GPU
