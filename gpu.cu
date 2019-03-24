@@ -12,7 +12,7 @@
 
 
 struct Bin{
-    particle_t** particles;
+    particle_t ** particles;
     int number_of_particles;
 };
 
@@ -162,6 +162,41 @@ __device__ void apply_forces_on_grid(Bin* grid, const int dim, int tid){
    
 } 
 
+/* Put the particles inside the bins
+   assumes bin structure is already on GPU "d_grid"
+   assumes particles are already on GPU "d_particles"
+ */
+__global__ void initial_binning(Bin *grid, particle_t * particles, const int n, const int dim, const int cell_size, const int particles_per_bin) 
+{
+	/* Each thread owns a bin and looks at all particles */
+	// Get thread (particle) ID, the global thread ID
+	int tid = threadIdx.x + blockIdx.x * blockDim.x;
+	if(tid >= n) return;
+
+	// i and j dimensions of bin from the tid
+	// assuming the thread id owns the bins in row wise manner
+	int bin_id_i = floor((double) (tid / dim));
+        int bin_id_j = tid % dim;
+
+	// Each particle if belongs to bin puts it in the particles array of bin
+	// assumes memory allocated for particles
+	grid[tid].number_of_particles = 0;
+	for(int p = 0; p < n; p++) 
+	{
+		int particle_idx_i = floor((double)(particles[p].y / cell_size));
+	        int particle_idx_j = floor((double) (particles[p].x / cell_size));
+		
+		// particle belongs to the bin
+		if( particle_idx_i == bin_id_i && particle_idx_j == bin_id_j )
+		{
+			// TODO: change to refer to actual particles and not the pointer
+		        grid[tid].particles[grid[tid].number_of_particles] = &particles[p];
+			grid[tid].number_of_particles++;
+			if( grid[tid].number_of_particles > particles_per_bin)
+				printf("Number of particles exceeded for thread id %d, bin_i %d, bin_j %d ", tid, bin_id_i, bin_id_j);
+		}
+	}
+}
 
 
 int main( int argc, char **argv )
@@ -210,6 +245,19 @@ int main( int argc, char **argv )
     Bin* grid = (Bin*) malloc(grid_dim*grid_dim*sizeof(Bin));
     for(int i = 0; i < grid_dim*grid_dim; i++)
         grid[i] = Bin(); 
+    
+    // Varibale for bin in gpu
+    Bin *d_bins;
+    // assuming the particles per bin doesn't exceed twice the proportionaly size
+    int particles_per_bin = floor(n / grid_dim * grid_dim) * 2;
+
+    //allocate memory for bin in gpu
+    cudaMalloc((void **) &d_bins, grid_dim * grid_dim * sizeof(Bin));
+    for(int i = 0; i < grid_dim * grid_dim; i++)
+    {
+	cudaMalloc((void **) &(d_bins[i].particles), particles_per_bin * sizeof(Bin));
+    }
+
 
     //used vector in host temporarily to bin particles in host
     // then papck the particles in the grid array to be used in gpu
