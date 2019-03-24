@@ -10,14 +10,10 @@
 #define NUM_THREADS 256
 
 
-
 struct Bin{
     particle_t ** particles;
     int number_of_particles;
 };
-
-
-
 
 extern double size;
 //
@@ -62,17 +58,6 @@ __global__ void compute_forces_gpu(particle_t * particles, int n)
 
 
 
-__global__ void compute_forces_gpu(particle_t * particles, int n)
-{
-  // Get thread (particle) ID
-  int tid = threadIdx.x + blockIdx.x * blockDim.x;
-  if(tid >= n) return;
-
-  particles[tid].ax = particles[tid].ay = 0;
-  for(int j = 0 ; j < n ; j++)
-    apply_force_gpu(particles[tid], particles[j]);
-
-}
 
 
 
@@ -135,8 +120,8 @@ __device__ void apply_forces_to_cell(Bin &src, Bin &neighbor){
 }
 
 //method to apply the forces on the bins
-__device__ void apply_forces_on_grid(Bin* grid, const int dim, int tid){
-
+__device__  void apply_forces_on_grid(Bin* grid, const int dim, int tid){
+    
     // assume that # of threads are <dim>
     int bin_i = tid/dim;
     int bin_j = tid%dim;
@@ -161,6 +146,23 @@ __device__ void apply_forces_on_grid(Bin* grid, const int dim, int tid){
     }
    
 } 
+
+
+
+
+__global__ void compute_forces_gpu(Bin* grid, int dim)
+{
+    // Get thread (particle) ID
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    if(tid >= dim*dim) return;
+
+    apply_forces_on_grid(grid, dim, tid);
+
+}
+
+
+
+
 
 /* Put the particles inside the bins
    assumes bin structure is already on GPU "d_grid"
@@ -227,6 +229,12 @@ int main( int argc, char **argv )
     set_size( n );
 
     init_particles( n, particles );
+    
+
+
+    cudaThreadSynchronize();
+    double copy_time = read_timer( );
+
 
 
     std::cout << "size: " << size << std::endl;
@@ -255,37 +263,17 @@ int main( int argc, char **argv )
     cudaMalloc((void **) &d_bins, grid_dim * grid_dim * sizeof(Bin));
     for(int i = 0; i < grid_dim * grid_dim; i++)
     {
-	cudaMalloc((void **) &(d_bins[i].particles), particles_per_bin * sizeof(Bin));
+	cudaMalloc((void **) &(d_bins[i].particles), particles_per_bin * sizeof(particle_t*));
     }
 
-
-    //used vector in host temporarily to bin particles in host
-    // then papck the particles in the grid array to be used in gpu
-    std::vector<particle_t*> temp[grid_dim][grid_dim];
-    for(int i = 0; i < n; i++){
-        int index_i = floor(particles[i].y/cell_size);
-        int index_j = floor(particles[i].x/cell_size);
-        temp[index_i][index_j].push_back(&particles[i]);
-    }
-    //naive way,, improve later
-    for(int i = 0; i < grid_dim; i++){
-        for(int j = 0; j < grid_dim; j++){
-            int number_of_particles = temp[i][j].size();
-            grid[i*grid_dim + j].number_of_particles = number_of_particles;
-            grid[i*grid_dim + j].particles = (particle_t**) malloc(number_of_particles * sizeof(particle_t*));
-            for(int k = 0; k < number_of_particles; k++){
-                grid[i*grid_dim + j].particles[k] = temp[i][j][k];
-            }
-            temp[i][j].clear();     
-        }
-    }
-
-    cudaThreadSynchronize();
-    double copy_time = read_timer( );
 
     // Copy the particles to the GPU
     cudaMemcpy(d_particles, particles, n * sizeof(particle_t), cudaMemcpyHostToDevice);
 
+
+    //after the binning the particles, send the bins to device    
+    //Bin* d_grid = send_grid_to_gpu(grid, grid_dim);
+    
     cudaThreadSynchronize();
     copy_time = read_timer( ) - copy_time;
     
@@ -294,21 +282,31 @@ int main( int argc, char **argv )
     //
     cudaThreadSynchronize();
     double simulation_time = read_timer( );
+	
+
+
+
+	int blks = (grid_dim * grid_dim + NUM_THREADS - 1) / NUM_THREADS;
+    initial_binning<<<blks, NUM_THREADS >>>(d_bins, d_particles, n, grid_dim, cell_size, particles_per_bin);
+
+    
+
 
     for( int step = 0; step < NSTEPS; step++ )
     {
-	int blks = (grid_dim * grid_dim + NUM_THREADS - 1) / NUM_THREADS;
-	initial_binning<<<blks, NUM_THREADS >>>(d_bins, d_particles, n, grid_dim, cell_size, particles_per_bin);
         //
         //  compute forces
         //
+	    //compute_forces_gpu <<< blks, NUM_THREADS >>> (d_particles, n);
+            
+        compute_forces_gpu <<< blks, NUM_THREADS >>> (d_bins, grid_dim);
 
-	compute_forces_gpu <<< blks, NUM_THREADS >>> (d_particles, n);
-        
+        cudaThreadSynchronize(); 
+
         //
         //  move particles
         //
-	move_gpu <<< blks, NUM_THREADS >>> (d_particles, n, size);
+	    move_gpu <<< blks, NUM_THREADS >>> (d_particles, n, size);
         
         //
         //  save if necessary
