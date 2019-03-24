@@ -297,11 +297,12 @@ int main( int argc, char **argv )
 
     for( int step = 0; step < NSTEPS; step++ )
     {
+	int blks = (grid_dim * grid_dim + NUM_THREADS - 1) / NUM_THREADS;
+	initial_binning<<<blks, NUM_THREADS >>>(d_bins, d_particles, n, grid_dim, cell_size, particles_per_bin);
         //
         //  compute forces
         //
 
-	int blks = (n + NUM_THREADS - 1) / NUM_THREADS;
 	compute_forces_gpu <<< blks, NUM_THREADS >>> (d_particles, n);
         
         //
