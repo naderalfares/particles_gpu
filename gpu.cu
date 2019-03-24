@@ -123,7 +123,7 @@ __device__ void apply_forces_to_cell(Bin &src, Bin &neighbor){
 __device__  void apply_forces_on_grid(Bin* grid, const int dim, int tid){
     
     // assume that # of threads are <dim>
-    int bin_i = tid/dim;
+    int bin_i = floor((double) tid/dim);
     int bin_j = tid%dim;
     int index = bin_i * dim + bin_j;
     int number_of_particles = grid[index].number_of_particles;
@@ -173,7 +173,7 @@ __global__ void initial_binning(Bin *grid, particle_t * particles, const int n, 
 	/* Each thread owns a bin and looks at all particles */
 	// Get thread (particle) ID, the global thread ID
 	int tid = threadIdx.x + blockIdx.x * blockDim.x;
-	if(tid >= n) return;
+	if(tid >= dim*dim) return;
 
 	// i and j dimensions of bin from the tid
 	// assuming the thread id owns the bins in row wise manner
@@ -199,6 +199,26 @@ __global__ void initial_binning(Bin *grid, particle_t * particles, const int n, 
 		}
 	}
 }
+
+
+
+__global__ void clear_grid(Bin* grid, const int dim){
+    
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    if(tid >= dim*dim) return;
+
+    int bin_i = floor((double)tid/dim);
+    int bin_j = tid%dim;
+    int index = bin_i * dim + bin_j;
+
+
+    delete grid[index].particles;
+
+}
+
+
+
+
 
 
 int main( int argc, char **argv )
@@ -284,20 +304,20 @@ int main( int argc, char **argv )
 
 
 
-	int blks = (grid_dim * grid_dim + NUM_THREADS - 1) / NUM_THREADS;
-    initial_binning<<<blks, NUM_THREADS >>>(d_bins, d_particles, n, grid_dim, cell_size, particles_per_bin);
 
     
 
 
     for( int step = 0; step < NSTEPS; step++ )
     {
+        //binning
+	    int blks = (grid_dim * grid_dim + NUM_THREADS - 1) / NUM_THREADS;
+        initial_binning<<<blks, NUM_THREADS >>>(d_bins, d_particles, n, grid_dim, cell_size, particles_per_bin);
+        
         //
         //  compute forces
         //
 	    //compute_forces_gpu <<< blks, NUM_THREADS >>> (d_particles, n);
-	blks = (grid_dim * grid_dim + NUM_THREADS - 1) / NUM_THREADS;
-            
         compute_forces_gpu <<< blks, NUM_THREADS >>> (d_bins, grid_dim);
 
         cudaThreadSynchronize(); 
@@ -307,6 +327,12 @@ int main( int argc, char **argv )
         //
 	    blks = (n + NUM_THREADS - 1) / NUM_THREADS;
 	    move_gpu <<< blks, NUM_THREADS >>> (d_particles, n, size);
+        
+
+        blks = (grid_dim * grid_dim + NUM_THREADS - 1) / NUM_THREADS;
+        clear_grid <<< blks, NUM_THREADS >>>  (d_bins, grid_dim);
+
+
         
         //
         //  save if necessary
