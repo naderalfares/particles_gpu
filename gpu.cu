@@ -107,7 +107,7 @@ __host__ Bin* send_grid_to_gpu(Bin* grid, int dim){
 }
 
 
-__device__ void apply_forces_to_cell(Bin &src, Bin neighbor){
+__device__ void apply_forces_to_cell(Bin &src, Bin &neighbor){
     int num_particles_src = src.number_of_particles;
     int num_particles_neighbor = neighbor.number_of_particles;
 
@@ -168,7 +168,7 @@ __global__ void compute_forces_gpu(Bin* grid, int dim)
    assumes bin structure is already on GPU "d_grid"
    assumes particles are already on GPU "d_particles"
  */
-__global__ void initial_binning(Bin* grid, particle_t * particles, const int n, const int dim, const int cell_size, const int particles_per_bin) 
+__global__ void initial_binning(Bin* grid, particle_t * particles, const int n, const int dim, const double cell_size, const int particles_per_bin) 
 {
 	/* Each thread owns a bin and looks at all particles */
 	// Get thread (particle) ID, the global thread ID
@@ -182,21 +182,23 @@ __global__ void initial_binning(Bin* grid, particle_t * particles, const int n, 
 
 	// Each particle if belongs to bin puts it in the particles array of bin
 	grid[tid] = Bin();
-	grid[tid].number_of_particles = -1;
+	grid[tid].number_of_particles = 0;
 	grid[tid].particles = new particle_t* [particles_per_bin];
 	for(int p = 0; p < n; p++) 
 	{
-		int particle_idx_i = floor((double)(particles[p].y / cell_size));
-	        int particle_idx_j = floor((double) (particles[p].x / cell_size));
+		//printf("Particle i : %d, x : %lf, y : %lf, cell_size : %lf\n", p, particles[p].x, particles[p].y, cell_size);
+		int particle_idx_i = 	__double2int_rd(floor((double)(particles[p].y / cell_size)));
+	        int particle_idx_j = 	__double2int_rd(floor((double) (particles[p].x / cell_size)));
 		
+		//printf("bin_i : %d, bin_j : %d, particle_bin_i : %d, particle_bin_j : %d\n", bin_id_i, bin_id_j, particle_idx_i, particle_idx_j);
 		// particle belongs to the bin
 		if( particle_idx_i == bin_id_i && particle_idx_j == bin_id_j )
 		{
 			// TODO: change to refer to actual particles and not the pointer
-			grid[tid].number_of_particles++;
 		        grid[tid].particles[grid[tid].number_of_particles] = &particles[p];
+			grid[tid].number_of_particles++;
 			if( grid[tid].number_of_particles > particles_per_bin)
-				printf("Number of particles exceeded for thread id %d, bin_i %d, bin_j %d ", tid, bin_id_i, bin_id_j);
+				printf("Number of particles exceeded for thread id %d, bin_i %d, bin_j %d\n", tid, bin_id_i, bin_id_j);
 		}
 	}
 }
@@ -255,12 +257,15 @@ int main( int argc, char **argv )
     double world_dim = size;
     int grid_dim = int(ceil(sqrt(n)));
     double cell_size = world_dim/grid_dim;
+    std::cout<< "Cell Size : " << cell_size << std::endl; 
+    std::cout<< "Grid Dim : " << grid_dim << std::endl; 
     //ensure to not violate cutoff constraint
     // if violated, set cell_size to be the cutoff
     std::cout<< "cutoff: " << cutoff << std::endl; 
     if(cell_size < cutoff){
         grid_dim = floor(world_dim / (2*cutoff));
         cell_size= world_dim / grid_dim; 
+    	std::cout<< "Cell Size : " << cell_size << std::endl; 
     }
 
     //double cell_size = 2*cutoff;
@@ -275,7 +280,8 @@ int main( int argc, char **argv )
     // Varibale for bin in gpu
     Bin *d_bins;
     // assuming the particles per bin doesn't exceed twice the proportionaly size
-    int particles_per_bin = floor(n / (grid_dim * grid_dim)) * 2;
+    //int particles_per_bin = floor(n / (grid_dim * grid_dim)) * 2;
+    int particles_per_bin = n;
 
     //allocate memory for bin in gpu
     cudaMalloc((void **) &d_bins, grid_dim * grid_dim * sizeof(Bin));
@@ -301,8 +307,9 @@ int main( int argc, char **argv )
     for( int step = 0; step < NSTEPS; step++ )
     {
         //binning
-	    int blks = (grid_dim * grid_dim + NUM_THREADS - 1) / NUM_THREADS;
+	    int blks = ((grid_dim * grid_dim) + NUM_THREADS - 1) / NUM_THREADS;
         initial_binning<<<blks, NUM_THREADS >>>(d_bins, d_particles, n, grid_dim, cell_size, particles_per_bin);
+        cudaThreadSynchronize(); 
         
         //
         //  compute forces
@@ -320,9 +327,10 @@ int main( int argc, char **argv )
         //cudaThreadSynchronize(); 
         
 
-        blks = (grid_dim * grid_dim + NUM_THREADS - 1) / NUM_THREADS;
+        blks = ((grid_dim * grid_dim) + NUM_THREADS - 1) / NUM_THREADS;
         clear_grid <<< blks, NUM_THREADS >>>  (d_bins, grid_dim);
 
+        //cudaThreadSynchronize(); 
         
         //
         //  save if necessary
