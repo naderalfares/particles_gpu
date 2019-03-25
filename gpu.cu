@@ -181,6 +181,7 @@ __global__ void initial_binning(Bin* grid, particle_t * particles, const int n, 
         int bin_id_j = tid % dim;
 
 	// Each particle if belongs to bin puts it in the particles array of bin
+	grid[tid] = Bin();
 	grid[tid].number_of_particles = 0;
 	grid[tid].particles = new particle_t* [particles_per_bin];
 	for(int p = 0; p < n; p++) 
