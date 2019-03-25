@@ -107,7 +107,7 @@ __host__ Bin* send_grid_to_gpu(Bin* grid, int dim){
 }
 
 
-__device__ void apply_forces_to_cell(Bin src, Bin &neighbor){
+__device__ void apply_forces_to_cell(Bin &src, Bin neighbor){
     int num_particles_src = src.number_of_particles;
     int num_particles_neighbor = neighbor.number_of_particles;
 
@@ -123,8 +123,8 @@ __device__ void apply_forces_to_cell(Bin src, Bin &neighbor){
 __device__  void apply_forces_on_grid(Bin* grid, const int dim, int tid){
     
     // assume that # of threads are <dim>
-    int bin_i = floor((double) tid/dim);
-    int bin_j = tid%dim;
+    int bin_i = floor((double) (tid/dim));
+    int bin_j = tid % dim;
     int index = bin_i * dim + bin_j;
     int number_of_particles = grid[index].number_of_particles;
     
@@ -182,7 +182,7 @@ __global__ void initial_binning(Bin* grid, particle_t * particles, const int n, 
 
 	// Each particle if belongs to bin puts it in the particles array of bin
 	grid[tid] = Bin();
-	grid[tid].number_of_particles = 0;
+	grid[tid].number_of_particles = -1;
 	grid[tid].particles = new particle_t* [particles_per_bin];
 	for(int p = 0; p < n; p++) 
 	{
@@ -193,8 +193,8 @@ __global__ void initial_binning(Bin* grid, particle_t * particles, const int n, 
 		if( particle_idx_i == bin_id_i && particle_idx_j == bin_id_j )
 		{
 			// TODO: change to refer to actual particles and not the pointer
-		        grid[tid].particles[grid[tid].number_of_particles] = &particles[p];
 			grid[tid].number_of_particles++;
+		        grid[tid].particles[grid[tid].number_of_particles] = &particles[p];
 			if( grid[tid].number_of_particles > particles_per_bin)
 				printf("Number of particles exceeded for thread id %d, bin_i %d, bin_j %d ", tid, bin_id_i, bin_id_j);
 		}
@@ -263,6 +263,10 @@ int main( int argc, char **argv )
         cell_size= world_dim / grid_dim; 
     }
 
+    //double cell_size = 2*cutoff;
+   // grid_dim = floor(world_dim / cell_size);
+    
+
     //init grid
     Bin* grid = (Bin*) malloc(grid_dim*grid_dim*sizeof(Bin));
     for(int i = 0; i < grid_dim*grid_dim; i++)
@@ -294,12 +298,6 @@ int main( int argc, char **argv )
     double simulation_time = read_timer( );
 	
 
-
-
-
-    
-
-
     for( int step = 0; step < NSTEPS; step++ )
     {
         //binning
@@ -312,18 +310,18 @@ int main( int argc, char **argv )
 	    //compute_forces_gpu <<< blks, NUM_THREADS >>> (d_particles, n);
         compute_forces_gpu <<< blks, NUM_THREADS >>> (d_bins, grid_dim);
 
-        cudaThreadSynchronize(); 
+        //cudaThreadSynchronize(); 
 
         //
         //  move particles
         //
-	    blks = (n + NUM_THREADS - 1) / NUM_THREADS;
-	    move_gpu <<< blks, NUM_THREADS >>> (d_particles, n, size);
+	blks = (n + NUM_THREADS - 1) / NUM_THREADS;
+	move_gpu <<< blks, NUM_THREADS >>> (d_particles, n, size);
+        //cudaThreadSynchronize(); 
         
 
         blks = (grid_dim * grid_dim + NUM_THREADS - 1) / NUM_THREADS;
         clear_grid <<< blks, NUM_THREADS >>>  (d_bins, grid_dim);
-
 
         
         //
