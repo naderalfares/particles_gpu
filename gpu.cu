@@ -99,7 +99,7 @@ __global__ void move_gpu (particle_t * particles, int n, double size)
 
 
 //method called by host to send the grid to gpu
-__host__ Bin* send_grid_to_gpu(Bin* &grid, int dim){
+__host__ Bin* send_grid_to_gpu(Bin* grid, int dim){
     Bin* d_grid;
     cudaMalloc((void **) &d_grid, dim * dim * sizeof(Bin));
     cudaMemcpy(d_grid, grid, dim * dim * sizeof(Bin), cudaMemcpyHostToDevice);
@@ -107,7 +107,7 @@ __host__ Bin* send_grid_to_gpu(Bin* &grid, int dim){
 }
 
 
-__device__ void apply_forces_to_cell(Bin &src, Bin &neighbor){
+__device__ void apply_forces_to_cell(Bin src, Bin &neighbor){
     int num_particles_src = src.number_of_particles;
     int num_particles_neighbor = neighbor.number_of_particles;
 
@@ -120,7 +120,7 @@ __device__ void apply_forces_to_cell(Bin &src, Bin &neighbor){
 }
 
 //method to apply the forces on the bins
-__device__  void apply_forces_on_grid(Bin* &grid, const int dim, int tid){
+__device__  void apply_forces_on_grid(Bin* grid, const int dim, int tid){
     
     // assume that # of threads are <dim>
     int bin_i = floor((double) tid/dim);
@@ -150,7 +150,7 @@ __device__  void apply_forces_on_grid(Bin* &grid, const int dim, int tid){
 
 
 
-__global__ void compute_forces_gpu(Bin* &grid, int dim)
+__global__ void compute_forces_gpu(Bin* grid, int dim)
 {
     // Get thread (particle) ID
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -168,7 +168,7 @@ __global__ void compute_forces_gpu(Bin* &grid, int dim)
    assumes bin structure is already on GPU "d_grid"
    assumes particles are already on GPU "d_particles"
  */
-__global__ void initial_binning(Bin* &grid, particle_t * particles, const int n, const int dim, const int cell_size, const int particles_per_bin) 
+__global__ void initial_binning(Bin* grid, particle_t * particles, const int n, const int dim, const int cell_size, const int particles_per_bin) 
 {
 	/* Each thread owns a bin and looks at all particles */
 	// Get thread (particle) ID, the global thread ID
@@ -200,9 +200,7 @@ __global__ void initial_binning(Bin* &grid, particle_t * particles, const int n,
 	}
 }
 
-
-
-__global__ void clear_grid(Bin* &grid, const int dim){
+__global__ void clear_grid(Bin* grid, const int dim){
     
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     if(tid >= dim*dim) return;
@@ -215,11 +213,6 @@ __global__ void clear_grid(Bin* &grid, const int dim){
     delete grid[index].particles;
 
 }
-
-
-
-
-
 
 int main( int argc, char **argv )
 {    
