@@ -211,7 +211,7 @@ __global__ void clear_grid(Bin* &grid, const int dim){
     int bin_j = tid%dim;
     int index = bin_i * dim + bin_j;
 
-
+    grid[index].number_of_particles = 0;
     delete grid[index].particles;
 
 }
