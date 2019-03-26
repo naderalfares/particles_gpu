@@ -6,6 +6,8 @@
 #include "common.h"
 #include<iostream>
 #include<vector>
+#include<cstring>
+#include<string>
 
 #define NUM_THREADS 256
 
@@ -177,13 +179,15 @@ __global__ void initial_binning(Bin* grid, particle_t * particles, const int n, 
 
 	// i and j dimensions of bin from the tid
 	// assuming the thread id owns the bins in row wise manner
-	int bin_id_i = floor((double) (tid / dim));
+	int bin_id_i = __double2int_rd(floor((double) (tid / dim)));
         int bin_id_j = tid % dim;
-
+	
+	int index = bin_id_i * dim + bin_id_j;
 	// Each particle if belongs to bin puts it in the particles array of bin
-	grid[tid] = Bin();
+	//grid[tid] = Bin();
 	grid[tid].number_of_particles = 0;
 	grid[tid].particles = new particle_t* [particles_per_bin];
+	//printf("Number of particles in bin i : %d,j : %d, numParticles : %d\n", bin_id_i, bin_id_j, grid[tid].number_of_particles);
 	for(int p = 0; p < n; p++) 
 	{
 		//printf("Particle i : %d, x : %lf, y : %lf, cell_size : %lf\n", p, particles[p].x, particles[p].y, cell_size);
@@ -197,10 +201,11 @@ __global__ void initial_binning(Bin* grid, particle_t * particles, const int n, 
 			// TODO: change to refer to actual particles and not the pointer
 		        grid[tid].particles[grid[tid].number_of_particles] = &particles[p];
 			grid[tid].number_of_particles++;
-			if( grid[tid].number_of_particles > particles_per_bin)
-				printf("Number of particles exceeded for thread id %d, bin_i %d, bin_j %d\n", tid, bin_id_i, bin_id_j);
+		//	if( grid[tid].number_of_particles > particles_per_bin)
+		//		printf("Number of particles %d, exceeded for thread id %d, bin_i %d, bin_j %d\n", grid[tid].number_of_particles ,tid, bin_id_i, bin_id_j);
 		}
 	}
+	//printf("Number of particles in bin i : %d,j : %d, numParticles : %d\n", bin_id_i, bin_id_j, grid[tid].number_of_particles);
 }
 
 __global__ void clear_grid(Bin* grid, const int dim){
@@ -215,6 +220,18 @@ __global__ void clear_grid(Bin* grid, const int dim){
     grid[index].number_of_particles = 0;
     delete grid[index].particles;
 
+}
+
+void checkCudaError(std::string msg)
+{
+  cudaError_t error = cudaGetLastError();
+  if(error != cudaSuccess)
+  {
+    // print the CUDA error message and exit
+    printf("CUDA error: %s\n", cudaGetErrorString(error));
+    std::cout<<"Problem in : "<<msg<<std::endl;
+    exit(-1);
+  }
 }
 
 int main( int argc, char **argv )
@@ -269,7 +286,7 @@ int main( int argc, char **argv )
     }
 
     //double cell_size = 2*cutoff;
-   // grid_dim = floor(world_dim / cell_size);
+    //grid_dim = floor(world_dim / cell_size);
     
 
     //init grid
@@ -280,8 +297,9 @@ int main( int argc, char **argv )
     // Varibale for bin in gpu
     Bin *d_bins;
     // assuming the particles per bin doesn't exceed twice the proportionaly size
-    //int particles_per_bin = floor(n / (grid_dim * grid_dim)) * 2;
-    int particles_per_bin = n;
+    int particles_per_bin = ceil((n + (grid_dim * grid_dim) - 1)  / (grid_dim * grid_dim)) * 3;
+    //int particles_per_bin = n;
+    std::cout<<"particles_per_bin "<<particles_per_bin<<std::endl;
 
     //allocate memory for bin in gpu
     cudaMalloc((void **) &d_bins, grid_dim * grid_dim * sizeof(Bin));
@@ -309,7 +327,8 @@ int main( int argc, char **argv )
         //binning
 	    int blks = ((grid_dim * grid_dim) + NUM_THREADS - 1) / NUM_THREADS;
         initial_binning<<<blks, NUM_THREADS >>>(d_bins, d_particles, n, grid_dim, cell_size, particles_per_bin);
-        cudaThreadSynchronize(); 
+        //cudaThreadSynchronize(); 
+	checkCudaError("Initial_Bining step ");
         
         //
         //  compute forces
@@ -317,6 +336,7 @@ int main( int argc, char **argv )
 	    //compute_forces_gpu <<< blks, NUM_THREADS >>> (d_particles, n);
         compute_forces_gpu <<< blks, NUM_THREADS >>> (d_bins, grid_dim);
 
+	checkCudaError("Compute forces step ");
         //cudaThreadSynchronize(); 
 
         //
@@ -326,10 +346,12 @@ int main( int argc, char **argv )
 	move_gpu <<< blks, NUM_THREADS >>> (d_particles, n, size);
         //cudaThreadSynchronize(); 
         
+	checkCudaError("Move gpu step ");
 
         blks = ((grid_dim * grid_dim) + NUM_THREADS - 1) / NUM_THREADS;
         clear_grid <<< blks, NUM_THREADS >>>  (d_bins, grid_dim);
 
+	checkCudaError("clear grid step ");
         //cudaThreadSynchronize(); 
         
         //
