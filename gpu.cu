@@ -15,6 +15,8 @@
 struct Bin{
     particle_t ** particles;
     int number_of_particles;
+    int particlesToMove;
+    particle_t ** movableParticles;
 };
 
 extern double size;
@@ -182,11 +184,12 @@ __global__ void initial_binning(Bin* grid, particle_t * particles, const int n, 
 	int bin_id_i = __double2int_rd(floor((double) (tid / dim)));
         int bin_id_j = tid % dim;
 	
-	int index = bin_id_i * dim + bin_id_j;
+	//int index = bin_id_i * dim + bin_id_j;
 	// Each particle if belongs to bin puts it in the particles array of bin
 	//grid[tid] = Bin();
 	grid[tid].number_of_particles = 0;
 	grid[tid].particles = new particle_t* [particles_per_bin];
+	grid[tid].movableParticles = new particle_t* [particles_per_bin];
 	//printf("Number of particles in bin i : %d,j : %d, numParticles : %d\n", bin_id_i, bin_id_j, grid[tid].number_of_particles);
 	for(int p = 0; p < n; p++) 
 	{
@@ -232,6 +235,80 @@ void checkCudaError(std::string msg)
     std::cout<<"Problem in : "<<msg<<std::endl;
     exit(-1);
   }
+}
+
+/* Does Rebinning of bins
+   Phase 1 - finds the particles to be moved to other bins
+   Particles to be moved are stored in a seperate list in the bin structure
+   Number of particles is decremented by number of particles to moved 
+   number of particles to be moved is stored in the bin structure
+*/
+__global__ void reBinning_phase1(Bin* grid, const int dim, const int cell_size, const int particles_per_bin)
+{
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    if(tid >= dim*dim) return;
+
+    int bin_i = floor((double)tid/dim);
+    int bin_j = tid%dim;
+    int index = bin_i * dim + bin_j;
+    grid[index].particlesToMove = 0;
+
+    int indexOfMovableParticles[10];
+    //int *indexOfMovableParticles = new int [particles_per_bin];
+
+    // Go through each particle get index of particle to be moved
+    for(int i=0; i < grid[index].number_of_particles; i++)
+    {
+	int particle_idx_i = floor((double)(grid[index].particles[i]->y / cell_size));
+	int particle_idx_j = floor((double) (grid[index].particles[i]->x / cell_size));
+	if( !(particle_idx_i == bin_i && particle_idx_j == bin_j))
+	{	
+		indexOfMovableParticles[ grid[index].particlesToMove ] = i;
+    		grid[index].particlesToMove++;
+		//printf("Bin %d %d, particle to move %d, #particles to move %d\n", bin_i, bin_j, i, grid[index].particlesToMove);
+	}
+    }
+   
+    // for the index of paticles to move, delete them from particles and store them in movableParticles
+    for(int i=0; i < grid[index].particlesToMove; i++)
+    {
+		int moveParticleIndex = indexOfMovableParticles[i]-i;
+		grid[index].movableParticles[i] = grid[ index].particles[moveParticleIndex ];
+		//printf("Moving Particle at index %d to %d\n", moveParticleIndex, i);
+		for(int j=moveParticleIndex ; j < grid[index].number_of_particles-1 ; j++)
+			grid[index].particles[j] = grid[index].particles[j+1];
+    }
+
+    grid[index].number_of_particles -= grid[index].particlesToMove;
+    //delete indexOfMovableParticles;
+}
+
+/* Rebinning of partilces phase 2
+   Second phase required for synchronizing all threads before they start adding particles
+   Phase 2 - moves particles to the appropriate location
+   synchronizes while adding and removing particles in other bins
+*/
+__global__ void reBinning_phase2(Bin* grid, const int dim, const double cell_size)
+{
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    if(tid >= dim*dim) return;
+
+    int bin_i = floor((double)tid/dim);
+    int bin_j = tid%dim;
+    int index = bin_i * dim + bin_j;
+
+    for(int i=0 ; i < grid[index].particlesToMove; i++)
+    {
+	int particle_idx_i = 	floor((double)(grid[index].movableParticles[i]->y / cell_size));
+	int particle_idx_j = 	floor((double) (grid[index].movableParticles[i]->x / cell_size));
+	// Get bin where the particle is to be moved
+	int moveBinIndex = particle_idx_i * dim + particle_idx_j;
+	
+	// Atomically get the location in bin where the particle should be stored
+	int moveParticlIndex = atomicAdd( &grid[moveBinIndex].number_of_particles, 1);
+	grid[moveBinIndex].particles[moveParticlIndex] = grid[index].movableParticles[i];
+    }
+	
 }
 
 int main( int argc, char **argv )
@@ -321,14 +398,15 @@ int main( int argc, char **argv )
     cudaThreadSynchronize();
     double simulation_time = read_timer( );
 	
+    int blks = ((grid_dim * grid_dim) + NUM_THREADS - 1) / NUM_THREADS;
+    //binning
+    initial_binning<<<blks, NUM_THREADS >>>(d_bins, d_particles, n, grid_dim, cell_size, particles_per_bin);
+    //checkCudaError("Initial_Bining step ");
 
     for( int step = 0; step < NSTEPS; step++ )
     {
-        //binning
-	    int blks = ((grid_dim * grid_dim) + NUM_THREADS - 1) / NUM_THREADS;
-        initial_binning<<<blks, NUM_THREADS >>>(d_bins, d_particles, n, grid_dim, cell_size, particles_per_bin);
+	//std::cout<<" Performing step "<<step<<std::endl;
         //cudaThreadSynchronize(); 
-	checkCudaError("Initial_Bining step ");
         
         //
         //  compute forces
@@ -336,7 +414,7 @@ int main( int argc, char **argv )
 	    //compute_forces_gpu <<< blks, NUM_THREADS >>> (d_particles, n);
         compute_forces_gpu <<< blks, NUM_THREADS >>> (d_bins, grid_dim);
 
-	checkCudaError("Compute forces step ");
+//	checkCudaError("Compute forces step ");
         //cudaThreadSynchronize(); 
 
         //
@@ -346,12 +424,21 @@ int main( int argc, char **argv )
 	move_gpu <<< blks, NUM_THREADS >>> (d_particles, n, size);
         //cudaThreadSynchronize(); 
         
-	checkCudaError("Move gpu step ");
+//	checkCudaError("Move gpu step ");
 
         blks = ((grid_dim * grid_dim) + NUM_THREADS - 1) / NUM_THREADS;
-        clear_grid <<< blks, NUM_THREADS >>>  (d_bins, grid_dim);
+	// clear_grid <<< blks, NUM_THREADS >>>  (d_bins, grid_dim);
+	//checkCudaError("clear grid step ");
 
-	checkCudaError("clear grid step ");
+	// Rebinning of particles
+	// Finding particles that have to be moved
+	reBinning_phase1 <<< blks, NUM_THREADS >>> (d_bins, grid_dim, cell_size, particles_per_bin);
+//	checkCudaError("rebinning phase 1 ");
+
+	// Moving the particles to desired bins
+	reBinning_phase2 <<< blks, NUM_THREADS >>> (d_bins, grid_dim, cell_size);
+//	checkCudaError("rebinning phase 2 ");
+
         //cudaThreadSynchronize(); 
         
         //
